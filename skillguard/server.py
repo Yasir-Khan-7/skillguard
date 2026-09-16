@@ -7,6 +7,7 @@ not a public service.
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -171,7 +172,19 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> int:
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = None
+    for candidate in range(port, port + 20):
+        try:
+            server = ThreadingHTTPServer((host, candidate), Handler)
+            break
+        except OSError as exc:
+            if exc.errno not in (48, 98):  # EADDRINUSE on macOS / Linux
+                raise
+            print(f"  port {candidate} is in use (another skillguard serve?), trying {candidate + 1}")
+    if server is None:
+        print(f"skillguard: no free port between {port} and {port + 19}", file=sys.stderr)
+        return 2
+    port = server.server_address[1]
     url = f"http://{host}:{port}"
     print(f"\n  SkillGuard {__version__} UI at {url}\n  Press Ctrl+C to stop.\n")
     if open_browser:
