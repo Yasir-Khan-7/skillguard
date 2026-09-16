@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skillguard"
-version = "0.1.0"
+version = "0.2.0"
 description = "Static safety scanner for agent skill packages (SKILL.md)"
 readme = "README.md"
 requires-python = ">=3.10"
