@@ -80,11 +80,18 @@ def _split_frontmatter(raw: str) -> tuple[str, str]:
 
 
 def _read_text(path: Path) -> str | None:
-    if path.suffix.lower() not in TEXT_SUFFIXES and path.name not in {"Dockerfile", "Makefile"}:
-        return None
+    known = path.suffix.lower() in TEXT_SUFFIXES or path.name in {"Dockerfile", "Makefile"}
+    if not known and path.suffix:
+        return None  # unknown extension: treat as binary
     try:
         if path.stat().st_size > MAX_FILE_BYTES:
             return None
+        if not known:
+            # Extensionless file (often a script with a shebang): sniff for binary.
+            with path.open("rb") as handle:
+                head = handle.read(1024)
+            if b"\0" in head:
+                return None
         return path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None

@@ -29,7 +29,7 @@ SkillGuard reads a skill package, flags dangerous patterns (credential theft, ex
 - Self-generated skills (agents that write their own) have the same risk with no marketplace to blame.
 - Reviewing every skill by hand does not scale. SkillGuard makes the first pass automatic and explainable.
 
-SkillGuard is a **static** scanner: it never executes the skill. That makes it safe to run anywhere and fast enough for CI, at the cost of not catching everything a sandbox would. Treat a `PASS` as "no known-bad patterns found", not "proven safe". Sandboxed execution is on the roadmap.
+SkillGuard has two layers. `skillguard scan` is **static**: it never executes the skill, so it is safe anywhere and fast enough for CI. `skillguard run` adds **dynamic** analysis: it executes the skill's scripts in a locked-down Docker container seeded with decoy credentials and records what they actually do. Treat a static `PASS` as "no known-bad patterns found", not "proven safe".
 
 ## Install
 
@@ -62,6 +62,10 @@ skillguard scan ./skills --fail-on review
 # Open a local web UI to paste a skill and scan it in the browser
 skillguard serve            # http://127.0.0.1:8765
 
+# Static scan, then execute the scripts in a Docker sandbox with decoy secrets
+skillguard run ./my-skill
+skillguard run ./my-skill --timeout 60 --keep-trace ./traces
+
 # Inspect a skill's manifest and files
 skillguard info ./my-skill
 
@@ -92,6 +96,38 @@ Rules are grouped by category: `credentials`, `exfiltration`, `rce`, `destructiv
 - **Prompt-injection** — "ignore previous instructions", "don't tell the user", hidden text in HTML comments or zero-width characters.
 - **Hygiene** — committed API keys and private keys, unpinned installs.
 
+## Sandbox (`skillguard run`)
+
+Static rules can be dodged with obfuscation, runtime downloads, or a language the
+regexes don't know. Behaviour can't. `skillguard run` executes every `.sh` and
+`.py` script (and any file with a shell or Python shebang) inside a container that
+has:
+
+- **no network** (`--network none`), so every attempted connection fails but is still logged;
+- **no capabilities**, no new privileges, a pid limit, a memory cap, and a non-root user;
+- a **fake home directory** seeded with decoy `~/.ssh/id_rsa`, `~/.aws/credentials`,
+  `~/.npmrc`, `~/.netrc`, `~/.env`, `~/.kube/config` and gcloud files;
+- `strace` on every process, capturing file opens, `execve` and `connect` calls.
+
+Observations become findings and merge into the same score and verdict:
+
+| Rule | Observation | Severity |
+| --- | --- | --- |
+| SG701 | Opened a decoy credential | critical |
+| SG702 | Attempted a network connection | high |
+| SG703 | Ran sudo, crontab, systemctl, chmod, … | high |
+| SG704 | Wrote a file outside the skill directory | medium |
+| SG705 | Did not finish within the timeout | low |
+
+Needs Docker. The image (`skillguard-sandbox:0.2`, Debian slim plus strace, Python,
+curl) builds on first use. If Docker is missing, `run` degrades to a static scan and
+says so; pass `--require-sandbox` to fail instead.
+
+Scripts run with no arguments, so a script that needs input will usually exit
+early. That still reveals what it does on startup, which is where malicious
+payloads tend to live. Scripts are run as the skill would run them; do not point
+this at a skill you would not be willing to execute in a disposable VM.
+
 ## Capability vs. declaration
 
 Well-behaved skills declare their tools in frontmatter:
@@ -121,7 +157,8 @@ There is also a reusable composite action in `action.yml`:
 
 ## Roadmap
 
-- Sandboxed dynamic analysis (Docker/gVisor) with network-egress logging.
+- Egress logging through a proxy (today the sandbox has no network at all).
+- gVisor / E2B backends for the sandbox.
 - Signed trust manifests (sigstore) so a scanned skill can be verified downstream.
 - A public registry of scanned community skills.
 - An LLM reviewer that compares stated description against actual behaviour.

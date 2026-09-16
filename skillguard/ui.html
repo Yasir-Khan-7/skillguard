@@ -97,6 +97,15 @@
   table.rules td { padding: 5px 8px; border-top: 1px solid var(--line); vertical-align: top; }
   table.rules td.id { font-family: var(--mono); color: var(--muted); white-space: nowrap; }
   .hidden { display: none !important; }
+  .sbx { margin: 14px 0 4px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; }
+  .sbx h3 { margin: 0 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .sbx .run { font-family: var(--mono); font-size: 12px; margin: 6px 0; }
+  .sbx .run .cmd { color: var(--text); font-weight: 600; }
+  .sbx .run .st { color: var(--muted); }
+  .sbx .line { font-family: var(--mono); font-size: 11.5px; margin-left: 12px; }
+  .sbx .line.bad { color: var(--critical); } .sbx .line.warn { color: var(--high); }
+  .sbx .line.dim { color: var(--muted); }
+  button.primary.run { background: #2e7d5b; border-color: #2e7d5b; color: #eafff3; }
 </style>
 </head>
 <body>
@@ -117,6 +126,7 @@
       <button id="btnAddFile" class="small">+ file</button>
       <button id="btnClear" class="small">Clear</button>
       <button id="btnScan" class="primary">Scan</button>
+      <button id="btnRun" class="primary run" title="Static scan + execute scripts in a Docker sandbox with decoy secrets">▶ Run in sandbox</button>
     </div>
     <div class="tabs" id="tabs"></div>
     <textarea id="text" spellcheck="false" placeholder="---&#10;name: my-skill&#10;description: What this skill does&#10;allowed-tools: Read, Bash&#10;---&#10;&#10;# My skill&#10;&#10;Steps the agent should follow..."></textarea>
@@ -124,7 +134,7 @@
       <input id="path" type="text" placeholder="…or scan a folder on this machine, e.g. ~/.claude/skills/my-skill">
       <button id="btnScanPath">Scan path</button>
     </div>
-    <div class="hint">Tip: pick an example, edit it, and re-scan. Add a <code>scripts/x.sh</code> file to see script rules fire. Pasted files are written to a temp folder, scanned, then deleted. Nothing is executed.</div>
+    <div class="hint">Tip: pick an example, edit it, and re-scan. Add a <code>scripts/x.sh</code> file to see script rules fire. Pasted files are written to a temp folder, scanned, then deleted. <b>Scan</b> never executes anything; <b>Run in sandbox</b> executes scripts inside a no-network Docker container with fake credentials.</div>
   </section>
 
   <section id="results">
@@ -179,16 +189,23 @@
   };
 
   // ---- scanning ------------------------------------------------------
-  async function post(body) {
-    const r = await fetch("/api/scan", { method: "POST",
+  async function post(body, route = "/api/scan") {
+    const r = await fetch(route, { method: "POST",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j;
   }
-  async function runScan() {
+  async function runScan(sandbox = false) {
     commit();
-    $("#out").innerHTML = '<div class="empty">Scanning…</div>';
-    try { render(await post({ files: state.files, min_severity: $("#minsev").value })); }
+    const route = sandbox ? "/api/run" : "/api/scan";
+    const p = $("#path").value.trim();
+    const body = p && !Object.values(state.files).some(t => t.trim())
+      ? { path: p } : { files: state.files };
+    body.min_severity = $("#minsev").value;
+    $("#out").innerHTML = `<div class="empty">${sandbox ? "Running scripts in the Docker sandbox… (first run builds the image, ~1 min)" : "Scanning…"}</div>`;
+    setBusy(true);
+    try { render(await post(body, route)); }
     catch (e) { $("#out").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+    finally { setBusy(false); }
   }
   async function runScanPath() {
     const p = $("#path").value.trim(); if (!p) return;
@@ -196,7 +213,9 @@
     try { render(await post({ path: p, min_severity: $("#minsev").value })); }
     catch (e) { $("#out").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   }
-  $("#btnScan").onclick = runScan;
+  function setBusy(b) { for (const id of ["btnScan", "btnRun", "btnScanPath"]) $("#" + id).disabled = b; }
+  $("#btnScan").onclick = () => runScan(false);
+  $("#btnRun").onclick = () => runScan(true);
   $("#btnScanPath").onclick = runScanPath;
   $("#path").addEventListener("keydown", (e) => { if (e.key === "Enter") runScanPath(); });
   document.addEventListener("keydown", (e) => {
@@ -224,6 +243,7 @@
     if (r.network_hosts.length) h += `<div class="kv">Network hosts</div><div class="chips">` +
       r.network_hosts.map(x => `<span class="chip host">${esc(x)}</span>`).join("") + `</div>`;
     for (const e of r.parse_errors || []) h += `<div class="err">! ${esc(e)}</div>`;
+    if (r.sandbox) h += renderSandbox(r.sandbox);
 
     if (!r.findings.length) {
       h += `<div class="kv" style="margin-top:14px;color:var(--pass)">No rule matches.</div>`;
@@ -232,7 +252,7 @@
       for (const f of r.findings) {
         if (f.severity !== cur) { cur = f.severity; h += `<div class="sev ${cur}">${cur.toUpperCase()}</div>`; }
         h += `<div class="finding ${f.severity}"><div class="r"><span class="id">${esc(f.rule_id)}</span><b>${esc(f.rule_name)}</b>` +
-          `<span class="loc" data-file="${esc(f.file)}" title="open in editor">${esc(f.file)}:${f.line}</span></div>` +
+          `<span class="loc" data-file="${esc(f.file)}" title="open in editor">${esc(f.file)}${f.line ? ":" + f.line : ""}</span></div>` +
           `<pre>${esc(f.excerpt)}</pre><div class="why">→ ${esc(f.why)}</div></div>`;
       }
     }
@@ -241,6 +261,26 @@
     for (const el of document.querySelectorAll(".loc")) el.onclick = () => {
       const f = el.dataset.file; if (f in state.files) { commit(); state.active = f; renderTabs(); load(); }
     };
+  }
+
+  function renderSandbox(sb) {
+    let h = `<div class="sbx"><h3>Sandbox</h3>`;
+    if (sb.error) return h + `<div class="line warn">unavailable: ${esc(sb.error)}</div></div>`;
+    if (!sb.runs.length) h += `<div class="line dim">no runnable scripts</div>`;
+    for (const run of sb.runs) {
+      const st = run.timed_out ? "timed out" : `exit ${run.exit_code}`;
+      h += `<div class="run"><span class="cmd">${esc(run.command)}</span> <span class="st">· ${st} in ${run.duration_s}s</span></div>`;
+      if (run.canary_reads.length) h += `<div class="line bad">decoys read: ${esc(run.canary_reads.join(", "))}</div>`;
+      if (run.connections.length) h += `<div class="line warn">connections: ${esc(run.connections.join(", "))}</div>`;
+      const procs = run.processes.slice(1, 9);
+      if (procs.length) h += `<div class="line dim">spawned: ${esc(procs.map(p => p.slice(0, 70)).join("  |  "))}</div>`;
+      const outside = run.files_written.filter(p => !p.includes("/skill/"));
+      if (outside.length) h += `<div class="line">wrote: ${esc(outside.join(", "))}</div>`;
+      if (run.trace_error) h += `<div class="line warn">! ${esc(run.trace_error)}</div>`;
+      if (run.stderr) h += `<details><summary>stderr</summary><pre class="json">${esc(run.stderr)}</pre></details>`;
+    }
+    for (const s of sb.skipped || []) h += `<div class="line dim">skipped: ${esc(s)}</div>`;
+    return h + `</div>`;
   }
 
   // ---- rules panel ---------------------------------------------------
@@ -254,7 +294,11 @@
 
   // ---- boot ----------------------------------------------------------
   (async () => {
-    try { $("#ver").textContent = (await (await fetch("/api/version")).json()).version; } catch {}
+    try {
+      const v = await (await fetch("/api/version")).json();
+      $("#ver").textContent = v.version;
+      if (!v.docker) { $("#btnRun").disabled = true; $("#btnRun").title = "Docker not available: " + v.docker_detail; }
+    } catch {}
     try {
       state.examples = await (await fetch("/api/examples")).json();
       for (const ex of state.examples) {
@@ -264,9 +308,13 @@
     } catch {}
     renderTabs(); load();
     // Deep link: /?example=risky-skill loads and scans that example immediately.
-    const want = new URLSearchParams(location.search).get("example");
+    const qs = new URLSearchParams(location.search);
+    const want = qs.get("example");
     if (want && state.examples.some(x => x.name === want)) {
-      $("#examples").value = want; $("#examples").dispatchEvent(new Event("change"));
+      const ex = state.examples.find(x => x.name === want);
+      $("#examples").value = want;
+      state.files = { ...ex.files }; state.active = "SKILL.md"; renderTabs(); load();
+      runScan(qs.get("run") === "1");
     }
   })();
 })();

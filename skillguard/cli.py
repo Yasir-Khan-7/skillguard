@@ -15,7 +15,7 @@ from .report import (
     render_summary_line,
     render_terminal,
 )
-from .rules import RULES
+from .rules import DYNAMIC_RULES, RULES
 from .scanner import ScanResult, scan
 
 EXIT_OK = 0
@@ -91,6 +91,47 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return EXIT_FINDINGS if worst >= threshold else EXIT_OK
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """Static scan plus sandboxed execution, merged into one verdict."""
+    from .sandbox import run_skill
+
+    target = Path(args.path).resolve()
+    if not target.exists():
+        print(f"skillguard: path not found: {target}", file=sys.stderr)
+        return EXIT_ERROR
+    try:
+        skill = parse_skill(target)
+    except FileNotFoundError as exc:
+        print(f"skillguard: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    result = scan(skill, min_severity=args.min_severity)
+    if args.static_only:
+        sandbox = None
+    else:
+        if args.format != "json":
+            print("  Running scripts in the sandbox…", file=sys.stderr)
+        sandbox = run_skill(skill, timeout=args.timeout, only=args.only or None,
+                            keep_trace=Path(args.keep_trace) if args.keep_trace else None)
+        if sandbox.error:
+            print(f"skillguard: sandbox unavailable: {sandbox.error}", file=sys.stderr)
+            if args.require_sandbox:
+                return EXIT_ERROR
+        result.merge_dynamic(sandbox.to_findings(), sandbox.to_dict())
+
+    color = not args.no_color and sys.stdout.isatty()
+    if args.format == "json":
+        print(render_json(result))
+    elif args.format == "markdown":
+        print(render_markdown(result))
+    elif args.format == "sarif":
+        print(render_sarif(result))
+    else:
+        print(render_terminal(result, color, show_why=not args.quiet_why))
+
+    return EXIT_FINDINGS if VERDICT_RANK[result.verdict] >= VERDICT_RANK[args.fail_on] else EXIT_OK
+
+
 def cmd_rules(args: argparse.Namespace) -> int:
     if args.format == "json":
         import json
@@ -116,12 +157,16 @@ def cmd_rules(args: argparse.Namespace) -> int:
     for rule in RULES:
         grouped.setdefault(rule.category, []).append(rule)
 
-    print(f"\n  {len(RULES)} rules\n")
+    print(f"\n  {len(RULES)} static rules\n")
     for category in sorted(grouped):
         print(f"  {category}")
         for rule in grouped[category]:
             print(f"    {rule.id}  {rule.severity.ljust(8)}  {rule.name}")
         print()
+    print(f"  {len(DYNAMIC_RULES)} sandbox observations (skillguard run)\n")
+    for rule in DYNAMIC_RULES:
+        print(f"    {rule.id}  {rule.severity.ljust(8)}  {rule.name}")
+    print()
     return EXIT_OK
 
 
@@ -179,6 +224,28 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--quiet-why", action="store_true", help="hide the explanation lines")
     scan_parser.add_argument("-v", "--verbose", action="store_true", help="show passing skills too")
     scan_parser.set_defaults(func=cmd_scan)
+
+    run_parser = sub.add_parser(
+        "run", help="scan, then execute the skill's scripts in a Docker sandbox with decoy secrets"
+    )
+    run_parser.add_argument("path", help="path to a skill directory or SKILL.md")
+    run_parser.add_argument("--format", choices=["terminal", "json", "sarif", "markdown"],
+                            default="terminal")
+    run_parser.add_argument("--min-severity", choices=["info", "low", "medium", "high", "critical"],
+                            default="low")
+    run_parser.add_argument("--fail-on", choices=["pass", "review", "block"], default="block")
+    run_parser.add_argument("--timeout", type=int, default=30,
+                            help="seconds each script may run (default 30)")
+    run_parser.add_argument("--only", action="append", metavar="SCRIPT",
+                            help="run only this script (relative path); repeatable")
+    run_parser.add_argument("--keep-trace", metavar="DIR",
+                            help="save the raw strace log of each script into DIR")
+    run_parser.add_argument("--static-only", action="store_true", help="skip the sandbox")
+    run_parser.add_argument("--require-sandbox", action="store_true",
+                            help="exit 2 instead of degrading to static when Docker is unavailable")
+    run_parser.add_argument("--no-color", action="store_true")
+    run_parser.add_argument("--quiet-why", action="store_true")
+    run_parser.set_defaults(func=cmd_run)
 
     rules_parser = sub.add_parser("rules", help="list the detection rules")
     rules_parser.add_argument("--format", choices=["terminal", "json"], default="terminal")

@@ -48,8 +48,16 @@ def _safe_relpath(relpath: str) -> str:
     return str(pure)
 
 
-def scan_files(files: dict[str, str], min_severity: str = "low") -> dict:
-    """Write pasted files to a throwaway directory and scan them."""
+def _run_sandbox(skill, result, timeout: int) -> None:
+    from .sandbox import run_skill
+
+    sandbox = run_skill(skill, timeout=timeout)
+    result.merge_dynamic(sandbox.to_findings(), sandbox.to_dict())
+
+
+def scan_files(files: dict[str, str], min_severity: str = "low",
+               sandbox: bool = False, timeout: int = 30) -> dict:
+    """Write pasted files to a throwaway directory and scan (optionally run) them."""
     if "SKILL.md" not in files:
         raise ValueError("a file named SKILL.md is required")
     with tempfile.TemporaryDirectory(prefix="skillguard-") as tmp:
@@ -58,17 +66,25 @@ def scan_files(files: dict[str, str], min_severity: str = "low") -> dict:
             target = root / _safe_relpath(relpath)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text, encoding="utf-8")
-        result = scan(parse_skill(root), min_severity=min_severity)
+        skill = parse_skill(root)
+        result = scan(skill, min_severity=min_severity)
+        if sandbox:
+            _run_sandbox(skill, result, timeout)
         payload = result.to_dict()
         payload["root"] = "(pasted)"
         return payload
 
 
-def scan_path(path: str, min_severity: str = "low") -> dict:
+def scan_path(path: str, min_severity: str = "low",
+              sandbox: bool = False, timeout: int = 30) -> dict:
     target = Path(path).expanduser().resolve()
     if not target.exists():
         raise FileNotFoundError(f"path not found: {target}")
-    return scan(parse_skill(target), min_severity=min_severity).to_dict()
+    skill = parse_skill(target)
+    result = scan(skill, min_severity=min_severity)
+    if sandbox:
+        _run_sandbox(skill, result, timeout)
+    return result.to_dict()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -122,25 +138,31 @@ class Handler(BaseHTTPRequestHandler):
                 ],
             )
         elif route == "/api/version":
-            self._json(200, {"version": __version__})
+            from .sandbox import docker_available
+
+            ok, detail = docker_available()
+            self._json(200, {"version": __version__, "docker": ok, "docker_detail": detail})
         else:
             self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
         route = self.path.split("?", 1)[0]
-        if route != "/api/scan":
+        if route not in {"/api/scan", "/api/run"}:
             self._json(404, {"error": "not found"})
             return
+        use_sandbox = route == "/api/run"
         try:
             data = self._read_json()
             min_severity = str(data.get("min_severity") or "low")
+            timeout = max(1, min(int(data.get("timeout") or 30), 300))
             if data.get("path"):
-                payload = scan_path(str(data["path"]), min_severity)
+                payload = scan_path(str(data["path"]), min_severity, use_sandbox, timeout)
             else:
                 files = data.get("files") or {}
                 if not isinstance(files, dict):
                     raise ValueError("files must be an object of {path: text}")
-                payload = scan_files({str(k): str(v) for k, v in files.items()}, min_severity)
+                payload = scan_files({str(k): str(v) for k, v in files.items()},
+                                     min_severity, use_sandbox, timeout)
             self._json(200, payload)
         except (ValueError, TypeError, FileNotFoundError, json.JSONDecodeError) as exc:
             self._json(400, {"error": str(exc)})
