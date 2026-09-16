@@ -9,3 +9,13 @@ build/
 .ruff_cache/
 .DS_Store
 *.sarif
+
+# never commit secrets or local config
+.env
+.env.*
+*.pem
+*.key
+*.p12
+credentials*
+*.token
+.claude/settings.local.json
