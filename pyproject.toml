@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skillguard"
+version = "0.1.0"
+description = "Static safety scanner for agent skill packages (SKILL.md)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["ai", "agents", "security", "skills", "static-analysis", "mcp"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+]
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+skillguard = "skillguard.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Yasir-Khan-7/skillguard"
+Issues = "https://github.com/Yasir-Khan-7/skillguard/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["skillguard"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

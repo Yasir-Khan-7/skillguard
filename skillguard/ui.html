@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkillGuard</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-2: #1d212a; --line: #2a2f3a;
+    --text: #e6e8ee; --muted: #8b93a5; --accent: #7aa2ff;
+    --pass: #3ddc84; --review: #f5c542; --block: #ff5c5c;
+    --critical: #ff5c5c; --high: #ffa94d; --medium: #4dc3ff; --low: #8fa3ff; --info: #8b93a5;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 24px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .3px; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  main { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(420px, 1.1fr);
+         gap: 18px; padding: 18px 24px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .head { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+          border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .head h2 { font-size: 13px; margin: 0; color: var(--muted); text-transform: uppercase;
+             letter-spacing: .6px; flex: 1; }
+  button, select, input[type=text] {
+    font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 10px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0b1020; border-color: var(--accent); font-weight: 600; }
+  button.small { padding: 3px 8px; font-size: 12px; }
+  .tabs { display: flex; gap: 4px; padding: 8px 10px 0; flex-wrap: wrap; }
+  .tab { padding: 5px 10px; border-radius: 6px 6px 0 0; border: 1px solid var(--line);
+         border-bottom: none; background: var(--panel-2); font-family: var(--mono); font-size: 12px;
+         cursor: pointer; display: flex; gap: 8px; align-items: center; }
+  .tab.active { background: #0f1115; color: var(--accent); }
+  .tab .x { color: var(--muted); }
+  .tab .x:hover { color: var(--block); }
+  textarea { width: 100%; min-height: 420px; resize: vertical; background: #0f1115; color: var(--text);
+             border: none; border-top: 1px solid var(--line); padding: 12px 14px; font-family: var(--mono);
+             font-size: 12.5px; line-height: 1.5; outline: none; tab-size: 2; }
+  .pathrow { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .pathrow input { flex: 1; font-family: var(--mono); }
+  .hint { color: var(--muted); font-size: 12px; padding: 0 14px 12px; }
+  .body { padding: 14px; }
+  .empty { color: var(--muted); padding: 40px; text-align: center; }
+  .verdict { display: inline-block; padding: 3px 10px; border-radius: 6px; font-weight: 700;
+             font-size: 12px; letter-spacing: .6px; color: #0b1020; }
+  .verdict.pass { background: var(--pass); } .verdict.review { background: var(--review); }
+  .verdict.block { background: var(--block); }
+  .title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .title b { font-size: 16px; }
+  .desc { color: var(--muted); margin: 4px 0 12px; }
+  .score { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+  .bar { flex: 1; height: 10px; background: #0f1115; border-radius: 6px; overflow: hidden;
+         border: 1px solid var(--line); }
+  .bar i { display: block; height: 100%; transition: width .3s; }
+  .num { font-family: var(--mono); font-size: 18px; font-weight: 700; width: 90px; text-align: right; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+  .chip { font-family: var(--mono); font-size: 11.5px; padding: 2px 8px; border-radius: 999px;
+          border: 1px solid var(--line); background: var(--panel-2); }
+  .chip.bad { border-color: var(--high); color: var(--high); }
+  .chip.host { color: var(--medium); }
+  .kv { color: var(--muted); font-size: 12.5px; margin: 6px 0 2px; }
+  .kv b { color: var(--text); font-weight: 600; }
+  .counts { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .count { font-family: var(--mono); font-size: 12px; padding: 3px 9px; border-radius: 6px;
+           background: var(--panel-2); border: 1px solid var(--line); }
+  .count.critical { color: var(--critical); } .count.high { color: var(--high); }
+  .count.medium { color: var(--medium); } .count.low { color: var(--low); }
+  .sev { margin-top: 16px; font-size: 12px; font-weight: 700; letter-spacing: .8px; }
+  .sev.critical { color: var(--critical); } .sev.high { color: var(--high); }
+  .sev.medium { color: var(--medium); } .sev.low { color: var(--low); } .sev.info { color: var(--info); }
+  .finding { border: 1px solid var(--line); border-left-width: 3px; border-radius: 6px;
+             padding: 8px 12px; margin: 8px 0; background: var(--panel-2); }
+  .finding.critical { border-left-color: var(--critical); } .finding.high { border-left-color: var(--high); }
+  .finding.medium { border-left-color: var(--medium); } .finding.low { border-left-color: var(--low); }
+  .finding .r { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .finding .id { font-family: var(--mono); color: var(--muted); font-size: 12px; }
+  .finding .loc { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-left: auto;
+                  cursor: pointer; }
+  .finding pre { margin: 6px 0; padding: 6px 8px; background: #0f1115; border-radius: 4px;
+                 font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  .finding .why { color: var(--muted); font-size: 12.5px; }
+  .err { color: var(--block); padding: 12px 14px; font-family: var(--mono); font-size: 12.5px; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  pre.json { background: #0f1115; padding: 10px; border-radius: 6px; font-family: var(--mono);
+             font-size: 11.5px; overflow: auto; max-height: 360px; }
+  table.rules { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  table.rules td { padding: 5px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+  table.rules td.id { font-family: var(--mono); color: var(--muted); white-space: nowrap; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛡 SkillGuard</h1>
+  <span class="sub">Static safety scan for agent skill packages · v<span id="ver">?</span></span>
+  <span class="spacer"></span>
+  <button id="btnRules" class="small">Rules</button>
+</header>
+
+<main>
+  <section id="editor">
+    <div class="head">
+      <h2>Skill package</h2>
+      <label class="kv">Example
+        <select id="examples"><option value="">— choose —</option></select>
+      </label>
+      <button id="btnAddFile" class="small">+ file</button>
+      <button id="btnClear" class="small">Clear</button>
+      <button id="btnScan" class="primary">Scan</button>
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <textarea id="text" spellcheck="false" placeholder="---&#10;name: my-skill&#10;description: What this skill does&#10;allowed-tools: Read, Bash&#10;---&#10;&#10;# My skill&#10;&#10;Steps the agent should follow..."></textarea>
+    <div class="pathrow">
+      <input id="path" type="text" placeholder="…or scan a folder on this machine, e.g. ~/.claude/skills/my-skill">
+      <button id="btnScanPath">Scan path</button>
+    </div>
+    <div class="hint">Tip: pick an example, edit it, and re-scan. Add a <code>scripts/x.sh</code> file to see script rules fire. Pasted files are written to a temp folder, scanned, then deleted. Nothing is executed.</div>
+  </section>
+
+  <section id="results">
+    <div class="head">
+      <h2>Result</h2>
+      <label class="kv">Min severity
+        <select id="minsev">
+          <option>info</option><option selected>low</option><option>medium</option>
+          <option>high</option><option>critical</option>
+        </select>
+      </label>
+    </div>
+    <div id="out" class="body"><div class="empty">Pick an example or paste a SKILL.md, then press Scan.</div></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const state = { files: { "SKILL.md": "" }, active: "SKILL.md", examples: [] };
+
+  // ---- editor --------------------------------------------------------
+  function renderTabs() {
+    const tabs = $("#tabs"); tabs.innerHTML = "";
+    for (const name of Object.keys(state.files)) {
+      const t = document.createElement("div");
+      t.className = "tab" + (name === state.active ? " active" : "");
+      t.innerHTML = `<span>${esc(name)}</span>` +
+        (name === "SKILL.md" ? "" : `<span class="x" title="remove">×</span>`);
+      t.querySelector("span").onclick = () => { commit(); state.active = name; renderTabs(); load(); };
+      const x = t.querySelector(".x");
+      if (x) x.onclick = (e) => { e.stopPropagation(); delete state.files[name];
+        if (state.active === name) state.active = "SKILL.md"; renderTabs(); load(); };
+      tabs.appendChild(t);
+    }
+  }
+  function load() { $("#text").value = state.files[state.active] ?? ""; }
+  function commit() { state.files[state.active] = $("#text").value; }
+  $("#text").addEventListener("input", commit);
+
+  $("#btnAddFile").onclick = () => {
+    const name = prompt("File path inside the skill (e.g. scripts/run.sh)", "scripts/run.sh");
+    if (!name) return;
+    commit(); state.files[name] = state.files[name] ?? ""; state.active = name; renderTabs(); load();
+    $("#text").focus();
+  };
+  $("#btnClear").onclick = () => { state.files = { "SKILL.md": "" }; state.active = "SKILL.md";
+    renderTabs(); load(); $("#out").innerHTML = '<div class="empty">Cleared.</div>'; };
+  $("#examples").onchange = (e) => {
+    const ex = state.examples.find(x => x.name === e.target.value); if (!ex) return;
+    state.files = { ...ex.files }; state.active = "SKILL.md"; renderTabs(); load(); runScan();
+  };
+
+  // ---- scanning ------------------------------------------------------
+  async function post(body) {
+    const r = await fetch("/api/scan", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j;
+  }
+  async function runScan() {
+    commit();
+    $("#out").innerHTML = '<div class="empty">Scanning…</div>';
+    try { render(await post({ files: state.files, min_severity: $("#minsev").value })); }
+    catch (e) { $("#out").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  }
+  async function runScanPath() {
+    const p = $("#path").value.trim(); if (!p) return;
+    $("#out").innerHTML = '<div class="empty">Scanning…</div>';
+    try { render(await post({ path: p, min_severity: $("#minsev").value })); }
+    catch (e) { $("#out").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  }
+  $("#btnScan").onclick = runScan;
+  $("#btnScanPath").onclick = runScanPath;
+  $("#path").addEventListener("keydown", (e) => { if (e.key === "Enter") runScanPath(); });
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); runScan(); }
+  });
+
+  // ---- rendering -----------------------------------------------------
+  const LABEL = { pass: "PASS", review: "NEEDS REVIEW", block: "BLOCK" };
+  const COLOR = { pass: "var(--pass)", review: "var(--review)", block: "var(--block)" };
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+  function render(r) {
+    const c = r.counts || {};
+    let h = `<div class="title"><b>${esc(r.skill)}</b><span class="verdict ${r.verdict}">${LABEL[r.verdict]}</span></div>`;
+    if (r.description) h += `<div class="desc">${esc(r.description)}</div>`;
+    h += `<div class="score"><div class="bar"><i style="width:${r.score}%;background:${COLOR[r.verdict]}"></i></div><div class="num">${r.score}/100</div></div>`;
+    h += `<div class="counts">` + ["critical", "high", "medium", "low"].map(l =>
+      `<span class="count ${l}">${c[l] || 0} ${l}</span>`).join("") +
+      `<span class="count">${r.file_count} file${r.file_count === 1 ? "" : "s"}</span></div>`;
+    h += `<div class="kv">Declared tools: <b>${r.declared_tools.length ? esc(r.declared_tools.join(", ")) : "(none)"}</b></div>`;
+    h += `<div class="kv">Inferred capabilities</div><div class="chips">` +
+      (r.capabilities.length ? r.capabilities.map(x =>
+        `<span class="chip ${r.undeclared_capabilities.includes(x) ? "bad" : ""}">${esc(x)}${r.undeclared_capabilities.includes(x) ? " · undeclared" : ""}</span>`).join("")
+        : `<span class="chip">none</span>`) + `</div>`;
+    if (r.network_hosts.length) h += `<div class="kv">Network hosts</div><div class="chips">` +
+      r.network_hosts.map(x => `<span class="chip host">${esc(x)}</span>`).join("") + `</div>`;
+    for (const e of r.parse_errors || []) h += `<div class="err">! ${esc(e)}</div>`;
+
+    if (!r.findings.length) {
+      h += `<div class="kv" style="margin-top:14px;color:var(--pass)">No rule matches.</div>`;
+    } else {
+      let cur = null;
+      for (const f of r.findings) {
+        if (f.severity !== cur) { cur = f.severity; h += `<div class="sev ${cur}">${cur.toUpperCase()}</div>`; }
+        h += `<div class="finding ${f.severity}"><div class="r"><span class="id">${esc(f.rule_id)}</span><b>${esc(f.rule_name)}</b>` +
+          `<span class="loc" data-file="${esc(f.file)}" title="open in editor">${esc(f.file)}:${f.line}</span></div>` +
+          `<pre>${esc(f.excerpt)}</pre><div class="why">→ ${esc(f.why)}</div></div>`;
+      }
+    }
+    h += `<details><summary>Raw JSON</summary><pre class="json">${esc(JSON.stringify(r, null, 2))}</pre></details>`;
+    $("#out").innerHTML = h;
+    for (const el of document.querySelectorAll(".loc")) el.onclick = () => {
+      const f = el.dataset.file; if (f in state.files) { commit(); state.active = f; renderTabs(); load(); }
+    };
+  }
+
+  // ---- rules panel ---------------------------------------------------
+  $("#btnRules").onclick = async () => {
+    const rules = await (await fetch("/api/rules")).json();
+    let h = `<div class="title"><b>${rules.length} detection rules</b></div><table class="rules">`;
+    for (const r of rules) h += `<tr><td class="id">${esc(r.id)}</td><td class="sev ${r.severity}" style="margin:0">${esc(r.severity)}</td>` +
+      `<td><b>${esc(r.name)}</b><div class="why">${esc(r.why)}</div></td><td class="id">${esc(r.category)}</td></tr>`;
+    $("#out").innerHTML = h + `</table>`;
+  };
+
+  // ---- boot ----------------------------------------------------------
+  (async () => {
+    try { $("#ver").textContent = (await (await fetch("/api/version")).json()).version; } catch {}
+    try {
+      state.examples = await (await fetch("/api/examples")).json();
+      for (const ex of state.examples) {
+        const o = document.createElement("option"); o.value = ex.name; o.textContent = ex.name;
+        $("#examples").appendChild(o);
+      }
+    } catch {}
+    renderTabs(); load();
+    // Deep link: /?example=risky-skill loads and scans that example immediately.
+    const want = new URLSearchParams(location.search).get("example");
+    if (want && state.examples.some(x => x.name === want)) {
+      $("#examples").value = want; $("#examples").dispatchEvent(new Event("change"));
+    }
+  })();
+})();
+</script>
+</body>
+</html>

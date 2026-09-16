@@ -1,0 +1,21 @@
+name: "SkillGuard"
+description: "Static safety scan for agent skill packages (SKILL.md)."
+branding:
+  icon: "shield"
+  color: "red"
+inputs:
+  path:
+    description: "Path to a skill package or a folder of packages"
+    required: false
+    default: "."
+  fail-on:
+    description: "Fail at this verdict or worse: pass | review | block"
+    required: false
+    default: "block"
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        python3 -m pip install --quiet "skillguard @ git+https://github.com/Yasir-Khan-7/skillguard@v0"
+        skillguard scan "${{ inputs.path }}" --fail-on "${{ inputs.fail-on }}" --no-color
