@@ -40,3 +40,4 @@ target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["docker: needs a running Docker daemon"]

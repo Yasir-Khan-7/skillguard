@@ -20,6 +20,11 @@ VERDICT_COLOR = {"pass": "\033[92m", "review": "\033[93m", "block": "\033[91m"}
 VERDICT_LABEL = {"pass": "PASS", "review": "NEEDS REVIEW", "block": "BLOCK"}
 
 
+def _loc(finding) -> str:
+    """file:line for static findings; sandbox findings have no line."""
+    return f"{finding.file}:{finding.line}" if finding.line else finding.file
+
+
 def _c(text: str, color: str, enabled: bool) -> str:
     return f"{color}{text}{RESET}" if enabled else text
 
@@ -68,6 +73,9 @@ def render_terminal(result: ScanResult, color: bool = True, show_why: bool = Tru
     for error in result.parse_errors:
         lines.append(_c(f"  ! {error}", COLORS["medium"], color))
 
+    if result.sandbox is not None:
+        lines.extend(_render_sandbox(result.sandbox, color))
+
     if result.findings:
         lines.append("")
         current_severity = None
@@ -79,7 +87,7 @@ def render_terminal(result: ScanResult, color: bool = True, show_why: bool = Tru
                 )
             marker = _c("●", COLORS[finding.severity], color)
             lines.append(f"    {marker} {finding.rule_id}  {finding.rule_name}")
-            lines.append(_c(f"        {finding.file}:{finding.line}", DIM, color))
+            lines.append(_c(f"        {_loc(finding)}", DIM, color))
             lines.append(f"        {finding.excerpt}")
             if show_why:
                 lines.append(_c(f"        → {finding.why}", DIM, color))
@@ -90,6 +98,36 @@ def render_terminal(result: ScanResult, color: bool = True, show_why: bool = Tru
         lines.append("")
 
     return "\n".join(lines)
+
+
+def _render_sandbox(sb: dict, color: bool) -> list[str]:
+    lines = [""]
+    if sb.get("error"):
+        lines.append(_c(f"  Sandbox: unavailable ({sb['error']})", COLORS["medium"], color))
+        return lines
+    runs = sb.get("runs") or []
+    lines.append(_c(f"  Sandbox: {len(runs)} script{'s' if len(runs) != 1 else ''} executed "
+                    f"({sb.get('image')})", BOLD, color))
+    for run in runs:
+        status = "timed out" if run["timed_out"] else f"exit {run['exit_code']}"
+        lines.append(f"    {run['command']}  ·  {status} in {run['duration_s']}s")
+        if run["canary_reads"]:
+            lines.append(_c(f"      decoys read: {', '.join(run['canary_reads'])}",
+                            COLORS["critical"], color))
+        if run["connections"]:
+            lines.append(_c(f"      connections: {', '.join(run['connections'])}",
+                            COLORS["high"], color))
+        procs = [p for p in run["processes"][1:]][:8]
+        if procs:
+            lines.append(_c(f"      spawned: {' | '.join(p[:60] for p in procs)}", DIM, color))
+        outside = [p for p in run["files_written"] if "/skill/" not in p]
+        if outside:
+            lines.append(f"      wrote: {', '.join(outside[:6])}")
+        if run.get("trace_error"):
+            lines.append(_c(f"      ! {run['trace_error']}", COLORS["medium"], color))
+    for item in sb.get("skipped") or []:
+        lines.append(_c(f"    skipped: {item}", DIM, color))
+    return lines
 
 
 def render_json(result: ScanResult) -> str:
@@ -123,7 +161,7 @@ def render_markdown(result: ScanResult) -> str:
             excerpt = finding.excerpt.replace("|", "\\|")
             lines.append(
                 f"| {finding.severity} | {finding.rule_id} {finding.rule_name} | "
-                f"`{finding.file}:{finding.line}` | `{excerpt}` |"
+                f"`{_loc(finding)}` | `{excerpt}` |"
             )
     else:
         lines.append("No rule matches.")
@@ -179,7 +217,7 @@ def render_sarif(result: ScanResult | list[ScanResult]) -> str:
                             {
                                 "physicalLocation": {
                                     "artifactLocation": {"uri": _sarif_uri(res, f, results)},
-                                    "region": {"startLine": f.line},
+                                    **({"region": {"startLine": f.line}} if f.line else {}),
                                 }
                             }
                         ],

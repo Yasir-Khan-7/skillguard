@@ -42,6 +42,7 @@ class ScanResult:
     network_hosts: list[str] = field(default_factory=list)
     file_count: int = 0
     parse_errors: list[str] = field(default_factory=list)
+    sandbox: dict | None = None
 
     @property
     def score(self) -> int:
@@ -82,7 +83,14 @@ class ScanResult:
             "file_count": self.file_count,
             "parse_errors": self.parse_errors,
             "findings": [f.to_dict() for f in self.findings],
+            "sandbox": self.sandbox,
         }
+
+    def merge_dynamic(self, findings: list[Finding], sandbox: dict) -> None:
+        """Attach sandbox observations and re-sort so the verdict reflects both."""
+        self.findings.extend(findings)
+        self.findings.sort(key=lambda f: (-SEVERITY_ORDER.get(f.severity, 0), f.file, f.line))
+        self.sandbox = sandbox
 
 
 CAPABILITY_PATTERNS: dict[str, str] = {

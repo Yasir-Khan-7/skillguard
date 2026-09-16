@@ -219,6 +219,23 @@ RULES: tuple[Rule, ...] = (
 )
 
 
+# Findings produced by the sandbox (skillguard run). Listed here so `skillguard
+# rules` shows them; they are observations, not regexes, so pattern is empty.
+DYNAMIC_RULES: tuple[Rule, ...] = (
+    Rule("SG701", "Read a decoy credential at runtime", "critical", "credentials", "",
+         "The script has no reason to touch this file. This is observed behaviour, "
+         "not a pattern match."),
+    Rule("SG702", "Attempted a network connection", "high", "exfiltration", "",
+         "The sandbox has no network; the script tried anyway. Check the destination."),
+    Rule("SG703", "Ran a privilege or persistence tool", "high", "persistence", "",
+         "Skills should not need root, cron, or service managers."),
+    Rule("SG704", "Wrote outside the skill directory", "medium", "destructive", "",
+         "Writes to the home directory or system paths persist after the skill ends."),
+    Rule("SG705", "Script did not finish within the timeout", "low", "hygiene", "",
+         "Hanging scripts often wait on a network that is not there, or on user input."),
+)
+
+
 def rules_by_category() -> dict[str, list[Rule]]:
     grouped: dict[str, list[Rule]] = {}
     for rule in RULES:

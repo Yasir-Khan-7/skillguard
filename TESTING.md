@@ -53,7 +53,22 @@ A browser tab opens at http://127.0.0.1:8765. From there you can:
 Pasted files are written to a temp folder, scanned, and deleted. The server binds
 to localhost only.
 
-## 5. Things worth trying by hand
+## 5. Run the sandbox
+
+Needs Docker Desktop running. The first call builds a small image (about a minute).
+
+```bash
+skillguard run examples/risky-skill      # decoys read, connection attempt, BLOCK
+skillguard run examples/safe-skill       # script runs, nothing suspicious, PASS
+pytest -q -m docker                      # five integration tests against real containers
+```
+
+In the web UI the green **Run in sandbox** button does the same for pasted files or a
+path, and shows a Sandbox panel with each script's exit code, decoys it read,
+connections it tried, processes it spawned and files it wrote. Use
+`--keep-trace DIR` on the CLI to save the raw strace logs.
+
+## 6. Things worth trying by hand
 
 Paste each of these into `SKILL.md` and confirm the rule fires:
 
@@ -72,7 +87,7 @@ Then try the declaration mismatch: set `allowed-tools: Read` in the frontmatter
 and mention `curl` in the body. The capability chip turns orange and the score
 drops by 8 per undeclared capability.
 
-## 6. Scan your real skills
+## 7. Scan your real skills
 
 ```bash
 skillguard scan ~/.claude/skills            # every SKILL.md under the folder
